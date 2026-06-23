@@ -1,11 +1,12 @@
 # Control de capacidad Microsoft Fabric (Script + Notebook)
 
-Este proyecto incluye **dos implementaciones equivalentes** para encender o apagar una capacidad de Microsoft Fabric mediante la API REST de Azure Resource Manager y autenticación de Service Principal (OAuth2 client credentials flow).
+Este proyecto incluye **tres implementaciones equivalentes** para encender o apagar una capacidad de Microsoft Fabric mediante la API REST de Azure Resource Manager y autenticación de Service Principal (OAuth2 client credentials flow).
 
-Los dos archivos hacen lo mismo y mantienen la misma estructura lógica:
+Los tres archivos hacen lo mismo y mantienen la misma estructura lógica:
 
-- `fabric_capacity_power.py` (formato script de Python)
-- `NT_fabric_capacity_power.ipynb` (formato notebook para Microsoft Fabric)
+- `fabric_capacity_power.py` (script Python)
+- `fabric_capacity_power.ps1` (script PowerShell 7+)
+- `NT_fabric_capacity_power.ipynb` (notebook para Microsoft Fabric)
 
 ## Objetivo
 
@@ -16,44 +17,50 @@ Permitir ejecutar una acción sobre una capacidad de Fabric:
 
 ## Requisitos
 
-- Python 3.9+ (recomendado)
-- Librería `requests`
+### Python
 
-Instalación de dependencia:
+- Python 3.9+
+- Librería `requests`
 
 ```bash
 pip install requests
 ```
 
+### PowerShell
+
+- PowerShell 7.0+ (`pwsh`)
+- Sin dependencias adicionales (usa `Invoke-RestMethod` e `Invoke-WebRequest` nativos)
+
+### Notebook
+
+- Entorno Microsoft Fabric con acceso al notebook
+
 ## Configuración
 
-En ambos archivos, al inicio se definen las mismas variables de configuración:
+En los tres archivos, al inicio se definen las mismas variables de configuración:
 
-- `TENANT_ID`: ID del tenant de Azure AD
-- `CLIENT_ID`: client ID del Service Principal
-- `CLIENT_SECRET`: client secret del Service Principal
-- `SUBSCRIPTION_ID`: ID de la suscripción de Azure
-- `RESOURCE_GROUP`: nombre del Resource Group
-- `CAPACITY_NAME`: nombre de la capacidad de Microsoft Fabric
-- `ACTION`: `"resume"` o `"suspend"`
+| Variable | Descripción |
+|---|---|
+| `TENANT_ID` | ID del tenant de Azure AD |
+| `CLIENT_ID` | Client ID del Service Principal |
+| `CLIENT_SECRET` | Client secret del Service Principal |
+| `SUBSCRIPTION_ID` | ID de la suscripción de Azure |
+| `RESOURCE_GROUP` | Nombre del Resource Group |
+| `CAPACITY_NAME` | Nombre de la capacidad de Microsoft Fabric |
+| `ACTION` | `resume` o `suspend` |
 
-## Estructura común (en ambos formatos)
+## Estructura común (en los tres formatos)
 
-Los dos ficheros comparten la misma lógica separada por funciones:
+Los tres ficheros comparten la misma lógica separada en funciones equivalentes:
 
-1. `obtener_token(...)`
-- Solicita el token OAuth2 a Azure AD usando client credentials.
+| Python | PowerShell | Descripción |
+|---|---|---|
+| `obtener_token()` | `Get-FabricToken` | Solicita el token OAuth2 a Azure AD usando client credentials |
+| `ejecutar_accion()` | `Invoke-FabricCapacityAction` | Llama al endpoint REST de ARM para `resume` o `suspend` |
+| `hacer_polling()` | `Invoke-AsyncPolling` | Gestiona operaciones asíncronas cuando la API responde `202 Accepted` |
+| `extraer_estado_desde_respuesta()` | `Get-OperationStatus` | Extrae el estado de la respuesta ARM (`status` o `provisioningState`) |
 
-2. `ejecutar_accion(...)`
-- Llama al endpoint REST de ARM para `resume` o `suspend`.
-
-3. `hacer_polling(...)`
-- Gestiona operaciones asíncronas cuando la API responde `202 Accepted`.
-- Usa la cabecera `Azure-AsyncOperation` o `Location` para consultar estado hasta `Succeeded` o `Failed`.
-
-4. Manejo de errores
-- Captura errores de autenticación, errores HTTP y errores de red.
-- Muestra mensajes claros en consola/salida de notebook.
+El polling usa la cabecera `Azure-AsyncOperation` o `Location` para consultar el estado hasta `Succeeded` o `Failed`.
 
 ## Endpoints REST usados
 
@@ -82,7 +89,16 @@ POST https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/
 python fabric_capacity_power.py
 ```
 
-### Opción 2: Notebook de Microsoft Fabric
+### Opción 2: Script PowerShell
+
+1. Edita las variables de configuración al inicio de `fabric_capacity_power.ps1`.
+2. Ejecuta:
+
+```powershell
+pwsh .\fabric_capacity_power.ps1
+```
+
+### Opción 3: Notebook de Microsoft Fabric
 
 1. Abre `NT_fabric_capacity_power.ipynb`.
 2. Ajusta las variables de configuración en la celda correspondiente.
@@ -92,13 +108,20 @@ python fabric_capacity_power.py
 
 Durante la ejecución se muestran estados como:
 
-- autenticando
-- enviando petición
-- operación asíncrona detectada
-- polling en progreso
-- operación completada (`Succeeded`) o error (`Failed`)
+```
+[INFO] Inicio de ejecución del script de control de capacidad Fabric.
+[INFO] Autenticando con Azure AD (client credentials)...
+[OK] Token obtenido correctamente.
+[INFO] Enviando petición 'suspend' a la capacidad 'mi-capacidad'...
+[INFO] Operación asíncrona detectada. Iniciando polling en: https://...
+[INFO] Polling intento #1...
+[INFO] Estado actual: InProgress
+[INFO] Polling intento #2...
+[OK] Operación completada correctamente (Succeeded).
+[OK] Proceso finalizado con éxito.
+```
 
 ## Notas de seguridad
 
 - No compartas ni subas `CLIENT_SECRET` a repositorios públicos.
-- Considera usar secretos gestionados (por ejemplo, variables seguras o Key Vault) para entornos productivos.
+- Considera usar secretos gestionados (por ejemplo, variables seguras de entorno o Azure Key Vault) para entornos productivos.
